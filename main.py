@@ -35,8 +35,8 @@ def load_dataset(filepath):
         return []
 
 
-def evaluate_model_on_aime():
-    logging.info(f"--- Starting evaluation for model: {MODEL_TO_EVALUATE} ---")
+def evaluate_model_on_aime(model):
+    logging.info(f"--- Starting evaluation for model: {model} ---")
 
     try:
         client = OpenAI(
@@ -73,7 +73,7 @@ def evaluate_model_on_aime():
             ]
 
             response = client.chat.completions.create(
-                model=MODEL_TO_EVALUATE,
+                model=model,
                 messages=prompt_messages,
             )
 
@@ -103,7 +103,7 @@ def evaluate_model_on_aime():
     accuracy = (total_correct / num_problems) * 100 if num_problems > 0 else 0
     avg_tokens = total_output_tokens / num_problems if num_problems > 0 else 0
 
-    logging.info(f"Model: {MODEL_TO_EVALUATE}")
+    logging.info(f"Model: {model}")
     logging.info(f"Total Problems Evaluated: {num_problems}")
     logging.info(f"Correct Answers: {total_correct}")
     logging.info(f"Accuracy: {accuracy:.2f}%")
@@ -113,4 +113,5 @@ def evaluate_model_on_aime():
 
 
 if __name__ == "__main__":
-    evaluate_model_on_aime()
+    model = MODEL_TO_EVALUATE
+    evaluate_model_on_aime(model)
