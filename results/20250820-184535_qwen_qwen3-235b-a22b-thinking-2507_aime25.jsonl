@@ -1,0 +1,1 @@
+{"idx": 1, "model": "qwen/qwen3-235b-a22b-thinking-2507", "problem": "Find the sum of all integer bases $b>9$ for which $17_b$ is a divisor of $97_b.$", "expected_answer": 70, "error": "Error code: 402 - {'error': {'message': 'Insufficient credits. Add more using https://openrouter.ai/settings/credits', 'code': 402}}"}

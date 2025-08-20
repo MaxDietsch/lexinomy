@@ -1,0 +1,1 @@
+{"idx": 1, "model": "deepseek/deepseek-chat-v3-0324:free", "problem": "Find the sum of all integer bases $b>9$ for which $17_b$ is a divisor of $97_b.$", "expected_answer": 70, "error": "'NoneType' object is not subscriptable"}

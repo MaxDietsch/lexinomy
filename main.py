@@ -17,6 +17,7 @@ logging.basicConfig(
 )
 
 chimera_r1t2 = "tngtech/deepseek-r1t2-chimera:free"
+chimera_r1t = "tngtech/deepseek-r1t-chimera:free"
 deepseek_r1 = "deepseek/deepseek-r1:free"
 deepseek_r1_0528 = "deepseek/deepseek-r1-0528:free"
 deepseek_v3 = "deepseek/deepseek-chat-v3-0324:free"
@@ -29,7 +30,7 @@ openai_gpt_oss_120b = "openai/gpt-oss-120b"
 z_ai_glm_4_5 = "z-ai/glm-4.5"
 
 
-free_models = [chimera_r1t2, deepseek_r1, deepseek_r1_0528, deepseek_v3, qwen3, moonshot_k2, google_gemma3, openai_gpt_oss_20b, z_ai_glm_4_5]
+free_models = [chimera_r1t2, chimera_r1t, deepseek_r1, deepseek_r1_0528, deepseek_v3, qwen3, moonshot_k2, google_gemma3, openai_gpt_oss_20b, z_ai_glm_4_5]
 payed_models = [openai_gpt_oss_120b]
 
 DATASET_FILE_PATH = "benchmarks/aime-25.jsonl"

@@ -6,5 +6,7 @@ readme = "README.md"
 requires-python = ">=3.12.3"
 dependencies = [
     "dotenv>=0.9.9",
+    "matplotlib>=3.10.5",
     "openai>=1.99.9",
+    "pandas>=2.3.1",
 ]
