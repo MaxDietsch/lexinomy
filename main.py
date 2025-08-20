@@ -1,8 +1,9 @@
-import os
-from openai import OpenAI
-import logging 
-from dotenv import load_dotenv
 import json
+import logging
+import os
+
+from dotenv import load_dotenv
+from openai import OpenAI
 
 load_dotenv()
 
@@ -24,7 +25,7 @@ def load_dataset(filepath):
                 data = json.loads(line)
                 dataset.append({
                     "problem": data["problem"],
-                    "solution": data["answer"] 
+                    "solution": data["answer"]
                 })
         return dataset
     except FileNotFoundError:
@@ -35,32 +36,36 @@ def load_dataset(filepath):
         return []
 
 
-def evaluate_model_on_aime(model):
-    logging.info(f"--- Starting evaluation for model: {model} ---")
-
+def get_client() -> OpenAI:
     try:
-        client = OpenAI(
-            base_url="https://openrouter.ai/api/v1", 
+        return OpenAI(
+            base_url="https://openrouter.ai/api/v1",
             api_key=os.getenv('OPENROUTER_API_KEY')
         )
     except Exception as e:
         logging.error("Error: Could not initialize OpenAI client.")
         logging.error("Please make sure your OPENROUTER_API_KEY environment variable is set correctly.")
         logging.error(f"Details: {e}")
-        return
+        raise e
+
+
+def evaluate_model_on_aime(model):
+    logging.info(f"--- Starting evaluation for model: {model} ---")
+
+    client = get_client()
+    dataset = load_dataset(DATASET_FILE_PATH)
 
     total_correct = 0
     total_output_tokens = 0
 
-    dataset = load_dataset(DATASET_FILE_PATH)
     for i, item in enumerate(dataset):
         problem = item["problem"]
         expected_solution = str(item["solution"])
-        logging.info(f"\n----- Evaluating Problem #{i+1} -----")
+        logging.info(f"\n----- Evaluating Problem #{i + 1} -----")
         logging.debug(f"Problem: {problem}")
 
         try:
-            #TODO: play around with system prompt, it is necessary at all? Maybe prompt the model to just return the solution. 
+            # TODO: play around with system prompt, it is necessary at all? Maybe prompt the model to just return the solution.
             prompt_messages = [
                 {
                     "role": "system",
@@ -84,18 +89,20 @@ def evaluate_model_on_aime(model):
             logging.debug(f"Model's Raw Output:\n{model_answer}")
             logging.debug(f"Output Tokens: {output_tokens}")
 
-            is_correct = f" {expected_solution} " in f" {model_answer} " or model_answer.endswith(expected_solution) #TODO eval logic
+            is_correct = f" {expected_solution} " in f" {model_answer} " or model_answer.endswith(
+                expected_solution)  # TODO eval logic
 
             if is_correct:
                 total_correct += 1
                 logging.info("Answer was: CORRECT")
             else:
-                logging.info(f"Answer was: INCORRECT (Expected to find: {expected_solution}, but solution is {model_answer})")
+                logging.info(
+                    f"Answer was: INCORRECT (Expected to find: {expected_solution}, but solution is {model_answer})")
 
             total_output_tokens += output_tokens
 
         except Exception as e:
-            logging.error(f"An error occurred while processing problem #{i+1}: {e}")
+            logging.error(f"An error occurred while processing problem #{i + 1}: {e}")
 
     # --- Final Results ---
     logging.info("\n\n===== Evaluation Summary =====")
