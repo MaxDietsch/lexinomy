@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, List, Optional, Sequence, Tuple
+from typing import List, Sequence, Tuple, Optional
 
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -88,7 +88,7 @@ class BasicStats:
     sum_completion_tokens: int
     sum_total_tokens: int
     extraction_rate: float  # % of rows with a parsed final answer
-    error_rate: float       # % of rows with an 'error' recorded
+    error_rate: float  # % of rows with an 'error' recorded
 
 
 def compute_basic_stats(df: pd.DataFrame) -> pd.DataFrame:
@@ -238,14 +238,75 @@ def summarize_from_dir(results_dir: str | Path) -> Tuple[pd.DataFrame, pd.DataFr
     return full_df, stats_df
 
 
+def _shorten_model_label(model: str) -> str:
+    """
+    Compact label for plotting: strip provider prefix and ':free' suffix.
+    """
+    short = model.split("/")[-1] if "/" in model else model
+    return short.replace(":free", "")
+
+
+def plot_tokens_vs_accuracy_for_run(
+        run_sub_dir: str | Path,
+        token_metric: str = "sum_completion_tokens",  # or "sum_total_tokens"
+        annotate: bool = True,
+        save_path: Optional[str | Path] = None,
+) -> pd.DataFrame:
+    """
+    Scatter plot: X = total tokens (per model over the run), Y = accuracy (%).
+    - run_sub_dir: the timestamped directory under 'results/', e.g. 'results/20250820-153541'
+    - token_metric: 'sum_completion_tokens' (default) or 'sum_total_tokens'
+    - annotate: write model labels near points
+    - save_path: optional path to save the figure (PNG). If None, only shows the plot.
+
+    Returns the per-model stats DataFrame used for plotting.
+    """
+    run_sub_dir = Path(run_sub_dir)
+    if not run_sub_dir.exists() or not run_sub_dir.is_dir():
+        raise FileNotFoundError(f"Run directory not found: {run_sub_dir}")
+
+    # Load only this run's JSONL files
+    files = sorted(run_sub_dir.glob("*.jsonl"))
+    if not files:
+        raise FileNotFoundError(f"No JSONL results in: {run_sub_dir}")
+
+    full_df = load_results(files)  # your existing loader that accepts a list/sequence
+    stats_df = compute_basic_stats(full_df)
+
+    if token_metric not in {"sum_completion_tokens", "sum_total_tokens"}:
+        raise ValueError("token_metric must be 'sum_completion_tokens' or 'sum_total_tokens'")
+
+    x = stats_df[token_metric]
+    y = stats_df["accuracy"]
+
+    plt.figure()
+    plt.scatter(x, y)
+    plt.xlabel("Total completion tokens (run)" if token_metric == "sum_completion_tokens"
+               else "Total tokens (run)")
+    plt.ylabel("Accuracy (%) on AIME-25")
+    plt.title(f"Tokens vs. Accuracy — {run_sub_dir.name}")
+    plt.grid(True, alpha=0.3)
+
+    if annotate:
+        for _, row in stats_df.iterrows():
+            plt.annotate(
+                _shorten_model_label(row["model"]),
+                (row[token_metric], row["accuracy"]),
+                textcoords="offset points",
+                xytext=(5, 5),
+            )
+
+    plt.tight_layout()
+    if save_path is not None:
+        plt.savefig(save_path, dpi=150)
+    plt.show()
+
+    return stats_df
+
+
 if __name__ == "__main__":
-    results_dir = "results"
-
-    full, stats = summarize_from_dir(results_dir)
-    print("\n=== Per-model stats ===")
-    print(stats.to_string(index=False, float_format=lambda v: f"{v:.2f}"))
-
-    plot_accuracy_bar(stats)
-    plot_avg_tokens_bar(stats)
-    plot_token_breakdown(stats)
-    plot_completion_token_box(full)
+    run = "20250820-190320"
+    plot_tokens_vs_accuracy_for_run(f"results/{run}",
+                                    token_metric="sum_completion_tokens",
+                                    annotate=True,
+                                    save_path=f"results/{run}/tokens_vs_accuracy.png")
