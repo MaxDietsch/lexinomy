@@ -94,24 +94,26 @@ def make_results_path(model: str, run_dir: Path) -> Path:
     return run_dir / fname
 
 
-_ANSWER_RE = re.compile(r"The final answer is\s*([\-]?\d+)\b", re.IGNORECASE)
-
+ANSWER_LINE_RE = re.compile(r"(?im)^\s*Answer:\s*(-?\d+)\s*$")
+BOXED_RE = re.compile(r"\\boxed\\{(-?\\d+)\\}")
 
 def extract_final_answer(text: str):
     """
-    Extracts the integer after 'The final answer is ...'.
-    Returns an int if found (and in range 0..999), else None.
+    Prefer 'Answer: <int>' on its own line; fall back to \boxed{<int>}.
+    Enforce AIME integer range [0, 999].
     """
     if not text:
         return None
-    m = _ANSWER_RE.search(text)
+
+    m = ANSWER_LINE_RE.search(text)
+    if not m:
+        m = BOXED_RE.search(text)
     if not m:
         return None
+
     try:
         val = int(m.group(1))
-        if 0 <= val <= 999:  # AIME range guard
-            return val
-        return None
+        return val if 0 <= val <= 999 else None
     except Exception:
         return None
 
@@ -142,13 +144,16 @@ def evaluate_model_on_aime(model: str, run_dir: Path):
             prompt_messages = [
                 {
                     "role": "system",
+                    "content": "You are a careful competition mathematician. Be concise and correct.",
+                },
+                {
+                    "role": "user",
                     "content": (
-                        "You are a world-class mathematician. Your task is to solve the following problem. "
-                        "Provide your reasoning, but always end your response with 'The final answer is ###', "
-                        "where ### is the integer solution."
+                        "Solve the problem step by step. Then, on a new final line, output exactly:\n"
+                        "Answer: <integer>\n\n"
+                        f"{problem}"
                     ),
                 },
-                {"role": "user", "content": problem},
             ]
 
             response = client.chat.completions.create(

@@ -1,0 +1,16 @@
+{
+  "run_timestamp": "20250820-191135",
+  "dataset": "benchmarks/aime-25.jsonl",
+  "models": [
+    "tngtech/deepseek-r1t2-chimera:free",
+    "tngtech/deepseek-r1t-chimera:free",
+    "deepseek/deepseek-r1:free",
+    "deepseek/deepseek-r1-0528:free",
+    "deepseek/deepseek-chat-v3-0324:free",
+    "qwen/qwen3-235b-a22b-thinking-2507",
+    "moonshotai/kimi-k2:free",
+    "google/gemma-3-27b-it:free",
+    "openai/gpt-oss-20b:free",
+    "z-ai/glm-4.5"
+  ]
+}
