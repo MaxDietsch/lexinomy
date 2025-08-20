@@ -28,10 +28,13 @@ google_gemma3 = "google/gemma-3-27b-it:free"
 openai_gpt_oss_20b = "openai/gpt-oss-20b:free"
 openai_gpt_oss_120b = "openai/gpt-oss-120b"
 z_ai_glm_4_5 = "z-ai/glm-4.5"
+mistral_nemo = "mistralai/mistral-nemo:free"
+mistral_small_24b = "mistralai/mistral-small-3.2-24b-instruct:free"
+
 
 free_models = [
     chimera_r1t2, chimera_r1t, deepseek_r1, deepseek_r1_0528, deepseek_v3,
-    qwen3, moonshot_k2, google_gemma3, openai_gpt_oss_20b, z_ai_glm_4_5
+    qwen3, moonshot_k2, google_gemma3, openai_gpt_oss_20b, z_ai_glm_4_5, mistral_nemo, mistral_small_24b,
 ]
 payed_models = [openai_gpt_oss_120b]
 
