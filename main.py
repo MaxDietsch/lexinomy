@@ -29,12 +29,14 @@ openai_gpt_oss_20b = "openai/gpt-oss-20b:free"
 openai_gpt_oss_120b = "openai/gpt-oss-120b"
 z_ai_glm_4_5 = "z-ai/glm-4.5"
 
-
-free_models = [chimera_r1t2, chimera_r1t, deepseek_r1, deepseek_r1_0528, deepseek_v3, qwen3, moonshot_k2, google_gemma3, openai_gpt_oss_20b, z_ai_glm_4_5]
+free_models = [
+    chimera_r1t2, chimera_r1t, deepseek_r1, deepseek_r1_0528, deepseek_v3,
+    qwen3, moonshot_k2, google_gemma3, openai_gpt_oss_20b, z_ai_glm_4_5
+]
 payed_models = [openai_gpt_oss_120b]
 
 DATASET_FILE_PATH = "benchmarks/aime-25.jsonl"
-RESULTS_DIR = "results"
+RESULTS_ROOT = Path("results")  # parent directory for all runs
 
 
 def load_dataset(filepath):
@@ -72,12 +74,24 @@ def sanitize_for_filename(s: str) -> str:
     return re.sub(r"[^A-Za-z0-9._-]+", "_", s)
 
 
-def make_results_path(model: str) -> Path:
+def make_run_dir(results_root: Path = RESULTS_ROOT) -> Path:
+    """
+    Create and return a timestamped directory for this run, e.g.:
+    results/20250820-153541/
+    """
     ts = datetime.now().strftime("%Y%m%d-%H%M%S")
-    fname = f"{ts}_{sanitize_for_filename(model)}_aime25.jsonl"
-    outdir = Path(RESULTS_DIR)
-    outdir.mkdir(parents=True, exist_ok=True)
-    return outdir / fname
+    run_dir = results_root / ts
+    run_dir.mkdir(parents=True, exist_ok=True)
+    return run_dir
+
+
+def make_results_path(model: str, run_dir: Path) -> Path:
+    """
+    Build the file path for a model's results inside the given run directory.
+    Example: results/20250820-153541/tngtech_deepseek-r1t2-chimera_free_aime25.jsonl
+    """
+    fname = f"{sanitize_for_filename(model)}_aime25.jsonl"
+    return run_dir / fname
 
 
 _ANSWER_RE = re.compile(r"The final answer is\s*([\-]?\d+)\b", re.IGNORECASE)
@@ -86,7 +100,7 @@ _ANSWER_RE = re.compile(r"The final answer is\s*([\-]?\d+)\b", re.IGNORECASE)
 def extract_final_answer(text: str):
     """
     Extracts the integer after 'The final answer is ...'.
-    Returns an int if found, else None.
+    Returns an int if found (and in range 0..999), else None.
     """
     if not text:
         return None
@@ -94,12 +108,15 @@ def extract_final_answer(text: str):
     if not m:
         return None
     try:
-        return int(m.group(1))
+        val = int(m.group(1))
+        if 0 <= val <= 999:  # AIME range guard
+            return val
+        return None
     except Exception:
         return None
 
 
-def evaluate_model_on_aime(model: str):
+def evaluate_model_on_aime(model: str, run_dir: Path):
     logging.info(f"--- Starting evaluation for model: {model} ---")
 
     client = get_client()
@@ -108,7 +125,7 @@ def evaluate_model_on_aime(model: str):
         logging.error("Dataset empty; aborting.")
         return
 
-    results_path = make_results_path(model)
+    results_path = make_results_path(model, run_dir)
     logging.info(f"Writing per-problem results to: {results_path.resolve()}")
 
     total_correct = 0
@@ -208,10 +225,28 @@ def evaluate_model_on_aime(model: str):
     logging.info(f"Per-problem results saved to: {results_path.resolve()}")
 
 
+def write_run_manifest(run_dir: Path, dataset_path: str, models: list[str]) -> None:
+    """
+    Optional: saves basic run metadata alongside model files.
+    """
+    manifest = {
+        "run_timestamp": run_dir.name,  # matches directory name
+        "dataset": dataset_path,
+        "models": models,
+    }
+    with open(run_dir / "run_manifest.json", "w", encoding="utf-8") as f:
+        json.dump(manifest, f, ensure_ascii=False, indent=2)
+
 
 def evaluate_all_free_models():
+    # Create a fresh subdirectory for this run
+    run_dir = make_run_dir(RESULTS_ROOT)
+    logging.info(f"Run directory: {run_dir.resolve()}")
+
+    write_run_manifest(run_dir, DATASET_FILE_PATH, free_models)
+
     for model in free_models:
-        evaluate_model_on_aime(model)
+        evaluate_model_on_aime(model, run_dir)
 
 
 if __name__ == "__main__":
