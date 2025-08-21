@@ -46,7 +46,6 @@ def load_results(paths: Sequence[str | Path]) -> pd.DataFrame:
                 })
     df = pd.DataFrame(rows)
 
-    # Defensive typing
     if "expected_answer" in df:
         df["expected_answer"] = pd.to_numeric(df["expected_answer"], errors="coerce")
     if "extracted_final_answer" in df:
@@ -55,7 +54,6 @@ def load_results(paths: Sequence[str | Path]) -> pd.DataFrame:
         if col in df:
             df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0).astype(int)
 
-    # Prefer recorded is_correct; otherwise recompute, then treat missing as False
     recomputed = df["extracted_final_answer"] == df["expected_answer"]
     df["is_correct_final"] = df["is_correct"].where(df["is_correct"].notna(), recomputed)
     df["is_correct_final"] = df["is_correct_final"].fillna(False).astype(bool)
@@ -305,7 +303,7 @@ def plot_tokens_vs_accuracy_for_run(
 
 
 if __name__ == "__main__":
-    run = "20250820-190320"
+    run = "20250820-192213"
     plot_tokens_vs_accuracy_for_run(f"results/{run}",
                                     token_metric="sum_completion_tokens",
                                     annotate=True,

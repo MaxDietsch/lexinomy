@@ -133,14 +133,11 @@ def evaluate_model_on_aime(model: str, run_dir: Path):
     results_path = make_results_path(model, run_dir)
     logging.info(f"Writing per-problem results to: {results_path.resolve()}")
 
-    total_correct = 0
-    total_output_tokens = 0
-    num_problems = len(dataset)
 
     for i, item in enumerate(dataset):
         problem = item["problem"]
         expected_solution = item["solution"]
-        logging.info(f"\n----- Evaluating Problem #{i + 1} of {num_problems} -----")
+        logging.info(f"\n----- Evaluating Problem #{i + 1} of {len(dataset)} -----")
         logging.info(f"Problem: {problem}")
 
         try:
@@ -163,29 +160,8 @@ def evaluate_model_on_aime(model: str, run_dir: Path):
                 model=model,
                 messages=prompt_messages,
                 # temperature=0.2,  # optional: keep outputs tighter
-            )
+            )        
 
-            model_output = response.choices[0].message.content or ""
-            usage = getattr(response, "usage", None) or {}
-            prompt_tokens = getattr(usage, "prompt_tokens", None) or usage.get("prompt_tokens", 0) or 0
-            completion_tokens = getattr(usage, "completion_tokens", None) or usage.get("completion_tokens", 0) or 0
-            total_tokens = getattr(usage, "total_tokens", None) or usage.get("total_tokens", prompt_tokens + completion_tokens) or (prompt_tokens + completion_tokens)
-
-            logging.info(f"Model's Raw Output:\n{model_output}")
-            logging.info(f"Tokens — prompt: {prompt_tokens}, completion: {completion_tokens}, total: {total_tokens}")
-
-            extracted_answer = extract_final_answer(model_output)
-            is_correct = (extracted_answer is not None) and (int(extracted_answer) == int(expected_solution))
-
-            if is_correct:
-                total_correct += 1
-                logging.info("Answer was: CORRECT")
-            else:
-                logging.info(
-                    f"Answer was: INCORRECT (Expected: {expected_solution}, Extracted: {extracted_answer})"
-                )
-
-            total_output_tokens += completion_tokens
 
             # --- Write one JSONL row per problem ---
             row = {
@@ -193,44 +169,14 @@ def evaluate_model_on_aime(model: str, run_dir: Path):
                 "model": model,
                 "problem": problem,
                 "expected_answer": int(expected_solution),
-                "model_output_raw": model_output,
-                "extracted_final_answer": extracted_answer,
-                "is_correct": is_correct,
-                "tokens": {
-                    "prompt_tokens": prompt_tokens,
-                    "completion_tokens": completion_tokens,
-                    "total_tokens": total_tokens,
-                },
+                "response": response.model_dump(),
             }
             with open(results_path, "a", encoding="utf-8") as f:
                 f.write(json.dumps(row, ensure_ascii=False) + "\n")
 
         except Exception as e:
-            logging.error(f"An error occurred while processing problem #{i + 1}: {e}")
-            # still write a row so you don't lose traceability
-            row = {
-                "idx": i + 1,
-                "model": model,
-                "problem": problem,
-                "expected_answer": int(expected_solution),
-                "error": str(e),
-            }
-            with open(results_path, "a", encoding="utf-8") as f:
-                f.write(json.dumps(row, ensure_ascii=False) + "\n")
-
-    # --- Final Results ---
-    logging.info("\n\n===== Evaluation Summary =====")
-    accuracy = (total_correct / num_problems) * 100 if num_problems > 0 else 0
-    avg_completion_tokens = total_output_tokens / num_problems if num_problems > 0 else 0
-
-    logging.info(f"Model: {model}")
-    logging.info(f"Total Problems Evaluated: {num_problems}")
-    logging.info(f"Correct Answers: {total_correct}")
-    logging.info(f"Accuracy: {accuracy:.2f}%")
-    logging.info("---------------------------------")
-    logging.info(f"Total Completion Tokens Used: {total_output_tokens}")
-    logging.info(f"Average Completion Tokens per Problem: {avg_completion_tokens:.2f}")
-    logging.info(f"Per-problem results saved to: {results_path.resolve()}")
+            logging.error(f"An error occurred while processing problem #{i + 1}: {e} and model: {model}")
+            
 
 
 def write_run_manifest(run_dir: Path, dataset_path: str, models: list[str]) -> None:
