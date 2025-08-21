@@ -1,7 +1,10 @@
 import json
 import logging
 import os
+import random
 import re
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
 
@@ -31,7 +34,6 @@ z_ai_glm_4_5 = "z-ai/glm-4.5"
 mistral_nemo = "mistralai/mistral-nemo:free"
 mistral_small_24b = "mistralai/mistral-small-3.2-24b-instruct:free"
 
-
 free_models = [
     chimera_r1t2, chimera_r1t, deepseek_r1, deepseek_r1_0528, deepseek_v3,
     qwen3, moonshot_k2, google_gemma3, openai_gpt_oss_20b, z_ai_glm_4_5, mistral_nemo, mistral_small_24b,
@@ -39,7 +41,7 @@ free_models = [
 payed_models = [openai_gpt_oss_120b]
 
 DATASET_FILE_PATH = "benchmarks/aime-25.jsonl"
-RESULTS_ROOT = Path("results")  # parent directory for all runs
+RESULTS_ROOT = Path("results")
 
 
 def load_dataset(filepath):
@@ -65,10 +67,8 @@ def get_client() -> OpenAI:
             api_key=os.getenv("OPENROUTER_API_KEY"),
         )
     except Exception as e:
-        logging.error("Error: Could not initialize OpenAI client.")
-        logging.error(
-            "Please make sure your OPENROUTER_API_KEY environment variable is set correctly."
-        )
+        logging.error("Error: Could not initialize OpenAI client. "
+                      "Ensure OPENROUTER_API_KEY is set.")
         logging.error(f"Details: {e}")
         raise e
 
@@ -78,10 +78,6 @@ def sanitize_for_filename(s: str) -> str:
 
 
 def make_run_dir(results_root: Path = RESULTS_ROOT) -> Path:
-    """
-    Create and return a timestamped directory for this run, e.g.:
-    results/20250820-153541/
-    """
     ts = datetime.now().strftime("%Y%m%d-%H%M%S")
     run_dir = results_root / ts
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -89,10 +85,6 @@ def make_run_dir(results_root: Path = RESULTS_ROOT) -> Path:
 
 
 def make_results_path(model: str, run_dir: Path) -> Path:
-    """
-    Build the file path for a model's results inside the given run directory.
-    Example: results/20250820-153541/tngtech_deepseek-r1t2-chimera_free_aime25.jsonl
-    """
     fname = f"{sanitize_for_filename(model)}_aime25.jsonl"
     return run_dir / fname
 
@@ -100,20 +92,13 @@ def make_results_path(model: str, run_dir: Path) -> Path:
 ANSWER_LINE_RE = re.compile(r"(?im)^\s*Answer:\s*(-?\d+)\s*$")
 BOXED_RE = re.compile(r"\\boxed\\{(-?\\d+)\\}")
 
+
 def extract_final_answer(text: str):
-    """
-    Prefer 'Answer: <int>' on its own line; fall back to \boxed{<int>}.
-    Enforce AIME integer range [0, 999].
-    """
     if not text:
         return None
-
-    m = ANSWER_LINE_RE.search(text)
-    if not m:
-        m = BOXED_RE.search(text)
+    m = ANSWER_LINE_RE.search(text) or BOXED_RE.search(text)
     if not m:
         return None
-
     try:
         val = int(m.group(1))
         return val if 0 <= val <= 999 else None
@@ -121,87 +106,103 @@ def extract_final_answer(text: str):
         return None
 
 
+def chat_with_retry(client: OpenAI, model: str, messages: list, max_retries: int = 4):
+    last_exc = None
+    for attempt in range(max_retries):
+        try:
+            return client.chat.completions.create(model=model, messages=messages)
+        except Exception as e:
+            last_exc = e
+            # jittered exponential backoff
+            delay = (1.5 ** attempt) + random.uniform(0, 0.5)
+            logging.warning(f"[{model}] error attempt {attempt + 1}/{max_retries}: {e}. sleeping {delay:.2f}s")
+            time.sleep(delay)
+    raise RuntimeError(f"Permanent failure for model {model}: {last_exc}")
+
+
 def evaluate_model_on_aime(model: str, run_dir: Path):
     logging.info(f"--- Starting evaluation for model: {model} ---")
-
     client = get_client()
     dataset = load_dataset(DATASET_FILE_PATH)
     if not dataset:
-        logging.error("Dataset empty; aborting.")
+        logging.error(f"[{model}] Dataset empty; aborting.")
         return
 
     results_path = make_results_path(model, run_dir)
-    logging.info(f"Writing per-problem results to: {results_path.resolve()}")
+    logging.info(f"[{model}] Writing results to: {results_path.resolve()}")
 
-
-    for i, item in enumerate(dataset):
+    for i, item in enumerate(dataset, start=1):
         problem = item["problem"]
         expected_solution = item["solution"]
-        logging.info(f"\n----- Evaluating Problem #{i + 1} of {len(dataset)} -----")
-        logging.info(f"Problem: {problem}")
+        logging.info(f"[{model}] Problem #{i}/{len(dataset)}")
+
+        messages = [
+            {"role": "system", "content": "You are a careful competition mathematician. Be concise and correct."},
+            {"role": "user", "content":
+                "Solve the problem step by step. Then, on a new final line, output exactly:\n"
+                "Answer: <integer>\n\n"
+                f"{problem}"
+             },
+        ]
 
         try:
-            prompt_messages = [
-                {
-                    "role": "system",
-                    "content": "You are a careful competition mathematician. Be concise and correct.",
-                },
-                {
-                    "role": "user",
-                    "content": (
-                        "Solve the problem step by step. Then, on a new final line, output exactly:\n"
-                        "Answer: <integer>\n\n"
-                        f"{problem}"
-                    ),
-                },
-            ]
-
-            response = client.chat.completions.create(
-                model=model,
-                messages=prompt_messages,
-                # temperature=0.2,  # optional: keep outputs tighter
-            )        
-
-
-            # --- Write one JSONL row per problem ---
+            response = chat_with_retry(client, model, messages)
             row = {
-                "idx": i + 1,
+                "idx": i,
                 "model": model,
                 "problem": problem,
                 "expected_answer": int(expected_solution),
                 "response": response.model_dump(),
             }
-            with open(results_path, "a", encoding="utf-8") as f:
-                f.write(json.dumps(row, ensure_ascii=False) + "\n")
-
         except Exception as e:
-            logging.error(f"An error occurred while processing problem #{i + 1}: {e} and model: {model}")
-            
+            logging.error(f"[{model}] error on problem #{i}: {e}")
+            row = {
+                "idx": i,
+                "model": model,
+                "problem": problem,
+                "expected_answer": int(expected_solution),
+                "response": {"error": str(e)},
+            }
+
+        with open(results_path, "a", encoding="utf-8") as f:
+            f.write(json.dumps(row, ensure_ascii=False) + "\n")
 
 
-def write_run_manifest(run_dir: Path, dataset_path: str, models: list[str]) -> None:
-    """
-    Optional: saves basic run metadata alongside model files.
-    """
+def write_run_manifest(run_dir: Path, dataset_path: str, models: list[str], model_threads: int) -> None:
     manifest = {
-        "run_timestamp": run_dir.name,  # matches directory name
+        "run_timestamp": run_dir.name,
         "dataset": dataset_path,
         "models": models,
+        "parallel_models": model_threads,
     }
     with open(run_dir / "run_manifest.json", "w", encoding="utf-8") as f:
         json.dump(manifest, f, ensure_ascii=False, indent=2)
 
 
-def evaluate_all_free_models():
-    # Create a fresh subdirectory for this run
+def evaluate_models_parallel(models: list[str], threads: int):
+    """
+    Run whole-model evaluations in parallel. Each model runs sequentially through the dataset
+    but different models run concurrently (default 2).
+    """
     run_dir = make_run_dir(RESULTS_ROOT)
     logging.info(f"Run directory: {run_dir.resolve()}")
+    write_run_manifest(run_dir, DATASET_FILE_PATH, models, threads)
 
-    write_run_manifest(run_dir, DATASET_FILE_PATH, free_models)
+    with ThreadPoolExecutor(max_workers=max(1, threads)) as executor:
+        futures = {executor.submit(evaluate_model_on_aime, m, run_dir): m for m in models}
+        for fut in as_completed(futures):
+            model = futures[fut]
+            try:
+                fut.result()
+                logging.info(f"[{model}] completed")
+            except Exception as e:
+                logging.error(f"[{model}] crashed: {e}")
 
-    for model in free_models:
-        evaluate_model_on_aime(model, run_dir)
+
+def evaluate_all_free_models(num_threads: int) -> None:
+    evaluate_models_parallel(free_models, num_threads)
 
 
 if __name__ == "__main__":
-    evaluate_all_free_models()
+    # parallelize across models (default 2)
+    evaluate_all_free_models(4)
