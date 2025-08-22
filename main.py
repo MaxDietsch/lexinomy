@@ -205,4 +205,4 @@ def evaluate_all_free_models(num_threads: int) -> None:
 
 if __name__ == "__main__":
     # parallelize across models (default 2)
-    evaluate_all_free_models(4)
+    evaluate_all_free_models(1)
