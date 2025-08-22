@@ -118,7 +118,7 @@ def chat_with_retry(client: OpenAI, model: str, messages: list, max_retries: int
             delay = (1.5 ** attempt) + random.uniform(0, 0.5)
             logging.warning(f"[{model}] error attempt {attempt + 1}/{max_retries}: {e}. sleeping {delay:.2f}s")
             time.sleep(delay)
-    raise RuntimeError(f"Permanent failure for model {model}: {last_exc}")
+    raise RuntimeError(f"Permanent failure for model {model}") from last_exc
 
 
 def evaluate_model_on_aime(model: str, run_dir: Path):
