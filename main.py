@@ -4,6 +4,7 @@ import os
 import random
 import re
 import time
+import traceback
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
@@ -155,13 +156,14 @@ def evaluate_model_on_aime(model: str, run_dir: Path):
                 "response": response.model_dump(),
             }
         except Exception as e:
-            logging.error(f"[{model}] error on problem #{i}: {e}")
+            tb_str = traceback.format_exc()
+            logging.error(f"[{model}] error on problem #{i}: {e}\n{tb_str}")
             row = {
                 "idx": i,
                 "model": model,
                 "problem": problem,
                 "expected_answer": int(expected_solution),
-                "response": {"error": str(e)},
+                "response": {"error": tb_str},
             }
 
         with open(results_path, "a", encoding="utf-8") as f:
